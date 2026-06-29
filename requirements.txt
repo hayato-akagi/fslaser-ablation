@@ -1,0 +1,6 @@
+numpy>=1.26,<2.0
+pydantic>=2.7,<3.0
+scipy>=1.13,<2.0
+matplotlib>=3.9,<4.0
+pytest>=8.2,<9.0
+pytest-cov>=5.0,<6.0

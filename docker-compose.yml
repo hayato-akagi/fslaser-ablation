@@ -1,0 +1,7 @@
+services:
+  sim:
+    build: .
+    volumes:
+      - .:/app
+    working_dir: /app
+    command: ["python", "-m", "pytest", "tests/", "-v"]
