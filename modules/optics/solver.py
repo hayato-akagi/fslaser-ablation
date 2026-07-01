@@ -71,7 +71,7 @@ def compute_laser_field_sequence(
     intensity = _propagate_laser_intensity(I_surface, alpha_spa, alpha_fca, config)
     
     # === 9. 熱源項を計算 ===
-    source_term = _compute_heat_source(intensity, alpha_spa, alpha_fca, config.beta_cgs)
+    source_term = _compute_heat_source(intensity, alpha_spa, alpha_fca)
     
     return OpticsResult(
         intensity=intensity,
@@ -114,29 +114,31 @@ def _compute_epsilon_at_point(
     tau_e: float,
     config: OpticsConfig,
 ) -> complex:
-    """1点における Drude 複素誘電率を計算する。
-    
+    """1点における Drude 複素誘電率を計算する（論文 Eq.4）。
+
+    ε = 1 + (εr − 1)(1 − ne/n0) − ne e² / (ε0 me ω²(1 + iν/ω))
+
     Args:
         ne: キャリア密度 [cm⁻³]
         tau_e: 衝突時間 [s]
         config: OpticsConfig
-    
+
     Returns:
         ε: 複素誘電率
     """
-    # 単位変換: cm⁻³ → m⁻³
     ne_m3 = convert_cm3_to_m3(ne)
 
-    # 第1項: 背景誘電率（Si 光学誘電率 εr = 12.709 @ 1030nm、ne 非依存）
-    epsilon_s_rel = config.epsilon_r.real
+    # 第1項: 価電子帯間遷移の寄与（ne 増加で漂白される）
+    ne_ratio = ne / config.n0_valence
+    epsilon_interband = 1.0 + (config.epsilon_r - 1.0) * (1.0 - ne_ratio)
 
-    # 第2項: 自由キャリアの Drude 寄与（光学有効質量 m* を使用）
+    # 第2項: 自由キャリアの Drude 寄与（自由電子質量 me を使用）
     nu = 1.0 / tau_e
     omega = config.omega
     denominator = 1.0 + 1j * nu / omega
-    drude_term = (ne_m3 * config.e_charge**2) / (config.epsilon_0 * config.m_eff_drude * omega**2 * denominator)
+    drude_term = (ne_m3 * config.e_charge**2) / (config.epsilon_0 * config.m_e * omega**2 * denominator)
 
-    return epsilon_s_rel - drude_term
+    return epsilon_interband - drude_term
 
 
 def _compute_refractive_index(epsilon: NDArray[np.complex128]) -> NDArray[np.float64]:
@@ -270,25 +272,17 @@ def _compute_heat_source(
     intensity: NDArray[np.float64],
     alpha_spa: NDArray[np.float64],
     alpha_fca: NDArray[np.float64],
-    beta_cgs: float,
 ) -> NDArray[np.float64]:
-    """熱源項を計算する。
+    """熱源項を計算する（論文 Eq.11）。
 
-    S(z) = (α_SPA + α_FCA + β×I) × I = (α_SPA + α_FCA)×I + β×I²
-
-    β×I² は TPA の電子系への熱源項。TPA で生成されたキャリア1個あたり 2hν の
-    エネルギーが系に入り、そのうち Eg は電子系を経由してキャリア生成エネルギーとして
-    消費され（TTM キャリア項 -(Eg+3kB Te)×dne/dt で扱われる）、残りが電子加熱に寄与する。
-    β×I² を S に含め、キャリア項でのエネルギー保存を成立させる。
+    S(z,t) = α_total × I(z,t)   （α_total = α_SPA + α_FCA）
 
     Args:
         intensity: レーザー強度分布 [W/cm²], shape: (n_z,)
         alpha_spa: α_SPA(z) [cm⁻¹], shape: (n_z,)
-        alpha_fca: α_FCA(z) [cm⁻¹], shape: (n_z,) — Drude 由来（背景含む）
-        beta_cgs: TPA 係数 [cm/W]
+        alpha_fca: α_FCA(z) [cm⁻¹], shape: (n_z,)
 
     Returns:
         S(z): 熱源項 [W/cm³], shape: (n_z,)
     """
-    source_term = (alpha_spa + alpha_fca) * intensity + beta_cgs * intensity**2
-    return source_term
+    return (alpha_spa + alpha_fca) * intensity

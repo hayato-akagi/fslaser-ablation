@@ -3,6 +3,8 @@
 物理定数および相転移パラメータを Pydantic モデルで型安全に管理。
 """
 
+from typing import Literal
+
 from pydantic import BaseModel, ConfigDict
 from modules.material_properties.constants import PHYSICAL, SILICON
 
@@ -50,7 +52,12 @@ class TTMConfig(BaseModel):
     # グリッド間隔（euler_fdm から注入）
     dz: float
 
-    # Predictor-Corrector Crank-Nicolson パラメータ
+    # Te スキーム選択
+    # "cn"    : Predictor-Corrector Crank-Nicolson（半陰的、安定性高）
+    # "euler" : 前進オイラー（陽的、論文と同一スキーム。CFL条件を dt_max で管理すること）
+    te_scheme: Literal["cn", "euler"] = "cn"
+
+    # Predictor-Corrector Crank-Nicolson パラメータ（te_scheme="cn" 時のみ使用）
     cn_max_iter: int = 50
     cn_tol: float = 1e-6
 

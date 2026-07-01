@@ -21,17 +21,17 @@ def compute_bandgap(
     ne: NDArray[np.float64],
     phase_state: NDArray[np.int32],
 ) -> NDArray[np.float64]:
-    """バンドギャップエネルギー E_g を計算する。
+    """バンドギャップエネルギー E_g を計算する（論文 Table 1）。
 
     固相 (SOLID, MELTING):
-        E_g = 1.16 - 7.02e-4 × T_l² / (T_l + 1108)  （Varshni式、BGR除外）
+        E_g = 1.16 - 7.02e-4 × T_l² / (T_l + 1108) - 1.5e-8 × ne^(1/3)
 
     液相 (LIQUID, VAPORIZING, VAPOR):
         E_g = 0
 
     Args:
         Tl: 格子温度 [K], shape: (n_z,)
-        ne: キャリア密度 [cm⁻³], shape: (n_z,)  （BGR除外のため未使用、後方互換で保持）
+        ne: キャリア密度 [cm⁻³], shape: (n_z,)
         phase_state: 相状態, shape: (n_z,)
 
     Returns:
@@ -41,7 +41,7 @@ def compute_bandgap(
 
     solid_mask = _is_solid_phase(phase_state)
 
-    Eg[solid_mask] = _compute_bandgap_solid(Tl[solid_mask])
+    Eg[solid_mask] = _compute_bandgap_solid(Tl[solid_mask], ne[solid_mask])
     Eg[~solid_mask] = 0.0
 
     return Eg
@@ -358,7 +358,8 @@ def compute_bandgap_derivative(
 ) -> NDArray[np.float64]:
     """バンドギャップのキャリア密度偏微分 ∂Eg/∂ne を計算する。
 
-    BGR を除外したため全相で ∂Eg/∂ne = 0。
+    固相: ∂Eg/∂ne = -(1.5e-8 / 3) × ne^(-2/3)  [eV·cm³]
+    液相: 0
 
     Args:
         ne: キャリア密度 [cm⁻³], shape: (n_z,)
@@ -367,7 +368,11 @@ def compute_bandgap_derivative(
     Returns:
         ∂Eg/∂ne [eV·cm³], shape: (n_z,)
     """
-    return np.zeros_like(ne)
+    dEg_dne = np.zeros_like(ne)
+    solid_mask = _is_solid_phase(phase_state)
+    ne_safe = np.maximum(ne[solid_mask], 1.0)
+    dEg_dne[solid_mask] = -(1.5e-8 / 3.0) * ne_safe ** (-2.0 / 3.0)
+    return dEg_dne
 
 
 def compute_bandgap_derivative_tl(
@@ -416,15 +421,21 @@ def _is_solid_phase(phase_state: NDArray[np.int32]) -> NDArray[np.bool_]:
     return (phase_state == PhaseState.SOLID) | (phase_state == PhaseState.MELTING)
 
 
-def _compute_bandgap_solid(Tl: NDArray[np.float64]) -> NDArray[np.float64]:
-    """固相でのバンドギャップエネルギーを計算する（Varshni式）。
+def _compute_bandgap_solid(
+    Tl: NDArray[np.float64],
+    ne: NDArray[np.float64],
+) -> NDArray[np.float64]:
+    """固相でのバンドギャップエネルギーを計算する（Varshni式 + BGR）。
 
-    E_g = 1.16 - 7.02e-4 × T_l² / (T_l + 1108)
+    E_g = 1.16 - 7.02e-4 × T_l² / (T_l + 1108) - 1.5e-8 × ne^(1/3)
 
     Args:
         Tl: 格子温度 [K], shape: (n_solid,)
+        ne: キャリア密度 [cm⁻³], shape: (n_solid,)
 
     Returns:
         E_g [eV], shape: (n_solid,)
     """
-    return 1.16 - 7.02e-4 * Tl**2 / (Tl + 1108.0)
+    varshni = 1.16 - 7.02e-4 * Tl**2 / (Tl + 1108.0)
+    bgr = 1.5e-8 * ne ** (1.0 / 3.0)
+    return varshni - bgr

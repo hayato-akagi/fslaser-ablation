@@ -57,6 +57,7 @@ def run_simulation(fluence: float) -> dict:
         grid=GridConfig(n_z=N_Z, dz=DZ),
         time=TimeConfig(t_end=T_END, dt_max=DT_MAX, snapshot_interval=RECORD_EVERY),
         initial=InitialCondition(),
+        te_scheme="euler",  # 前進オイラー（論文再現用）。CFL条件は DT_MAX で管理。
     )
 
     optics_cfg = OpticsConfig(dz=DZ, fluence=fluence, pulse_duration=PULSE_DURATION)
@@ -66,8 +67,10 @@ def run_simulation(fluence: float) -> dict:
         config.grid, config.initial
     )
 
-    t    = T_START
-    step = 0
+    t      = T_START
+    step   = 0
+    t0_sim = time.time()
+    t_span = T_END - T_START
     times_list = []
     Te_list    = []
     ne_list    = []
@@ -91,6 +94,17 @@ def run_simulation(fluence: float) -> dict:
             Te_list.append(Te[0])
             ne_list.append(ne[0])
 
+            elapsed = time.time() - t0_sim
+            done    = t - T_START
+            pct     = done / t_span * 100
+            eta_str = f"{elapsed / done * (t_span - done):.0f}s" if done > 0 else "--"
+            print(
+                f"\r  {pct:5.1f}%  t={paper_t:6.3f}/{T_PAPER_END*1e12:.1f} ps"
+                f"  Te={Te[0]/1e3:.1f}e3K  ne={ne[0]:.2e}"
+                f"  elapsed={elapsed:.0f}s  ETA={eta_str}   ",
+                end="", flush=True,
+            )
+
         car = advance_carrier_density(
             ne=ne, intensity=opt.intensity, Te=Te, Tl=Tl,
             phase_state=phase_state, dt=dt, config=carrier_cfg,
@@ -105,6 +119,7 @@ def run_simulation(fluence: float) -> dict:
         t    += dt
         step += 1
 
+    print(f"\r  100.0%  完了  elapsed={time.time()-t0_sim:.0f}s" + " " * 40)
     return {
         "t":  np.array(times_list),
         "Te": np.array(Te_list) / 1e3,    # [10³ K]

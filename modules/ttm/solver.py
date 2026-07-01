@@ -76,10 +76,13 @@ def advance_temperatures_impl(
         config,
     )
 
-    # === 4. Predictor-Corrector CN で Te^{n+1} を解く ===
-    Te_new = _predictor_corrector_step(
-        Te, Ce_old, Ke_old, rhs_nondiff, ne, phase_state, dt, config
-    )
+    # === 4. Te^{n+1} を解く（スキームは config.te_scheme で切替） ===
+    if config.te_scheme == "euler":
+        Te_new = _euler_step_te(Te, Ce_old, Ke_old, rhs_nondiff, dt, config)
+    else:
+        Te_new = _predictor_corrector_step(
+            Te, Ce_old, Ke_old, rhs_nondiff, ne, phase_state, dt, config
+        )
 
     # === 5. 格子温度: 相転移判定を適用（陽的） ===
     phase_config = PhaseTransitionConfig(
@@ -109,7 +112,33 @@ def advance_temperatures_impl(
 
 
 # ============================================================================
-# Predictor-Corrector Crank-Nicolson（電子温度）
+# 前進オイラー（電子温度、te_scheme="euler"）
+# ============================================================================
+
+
+def _euler_step_te(
+    Te: NDArray[np.float64],
+    Ce: NDArray[np.float64],
+    Ke: NDArray[np.float64],
+    rhs_nondiff: NDArray[np.float64],
+    dt: float,
+    config: "TTMConfig",
+) -> NDArray[np.float64]:
+    """前進オイラー法で Te を1ステップ更新する。
+
+    Te^{n+1} = Te^n + dt/Ce * [∇(Ke∇Te) + rhs_nondiff]
+
+    全項を時刻 t=n の旧値で評価する（完全陽的）。
+    CFL条件 dt ≤ Ce*dz²/(2*Ke) を dt_max で外部管理すること。
+    """
+    diffusion = _compute_thermal_diffusion(Te, Ke, config.dz)
+    Ce_safe = np.maximum(Ce, 1e-30)
+    Te_new = Te + dt / Ce_safe * (diffusion + rhs_nondiff)
+    return np.clip(Te_new, config.T_room, 1e7)
+
+
+# ============================================================================
+# Predictor-Corrector Crank-Nicolson（電子温度、te_scheme="cn"）
 # ============================================================================
 
 

@@ -503,7 +503,7 @@ def compute_safe_dt(
     Cl_safe = np.maximum(Cl, 1e-30)
     alpha_l_max = float(np.max(Kl / Cl_safe))
 
-    # Te は Crank-Nicolson（陰的）で解くため電子 CFL 不要。格子 CFL のみ使用。
+    # 格子 CFL のみ評価。te_scheme="euler" 時は Te CFL を dt_max で外部管理すること。
     dt_cfl = 0.4 * dz**2 / max(alpha_l_max, 1e-30)
 
     return min(dt_cfl, dt_max)
@@ -526,7 +526,7 @@ def create_domain_configs(
     # 各ドメインの Config を生成（dz を注入）
     optics_config = OpticsConfig(dz=dz, fluence=fluence)
     carrier_config = CarrierConfig(dz=dz)
-    ttm_config = TTMConfig(dz=dz)
+    ttm_config = TTMConfig(dz=dz, te_scheme=config.te_scheme)
     ablation_config = AblationConfig()
     
     return optics_config, carrier_config, ttm_config, ablation_config
