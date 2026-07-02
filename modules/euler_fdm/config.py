@@ -45,7 +45,7 @@ class TimeConfig(BaseModel):
     model_config = ConfigDict(arbitrary_types_allowed=True)
     
     t_end: float = 500e-12
-    dt_max: float = 1e-15
+    dt_max: float = 5e-20
     snapshot_interval: int = 100
     pulse_duration: float = LASER_1030NM.pulse_duration
     

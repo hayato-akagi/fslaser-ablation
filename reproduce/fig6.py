@@ -46,7 +46,7 @@ DZ           = 5e-7
 T_PAPER_END  = 6e-12                        # 論文時間軸の終端 [s]
 T_START      = -T_PEAK_PS * 1e-12           # シミュレーション開始（= 論文 t=0）
 T_END        = T_PAPER_END + T_START        # シミュレーション終了
-DT_MAX       = 1e-17
+DT_MAX       = 5e-20
 RECORD_EVERY = 200
 
 
